@@ -679,6 +679,15 @@ Returns a list of all process identifiers.
 """
 procs() = Int[x.id for x in PGRP.workers if isa(x, LocalProcess) || (x.state == W_CONNECTED)]
 
+function id_in_procs(id)  # faster version of `id in procs()`
+    for x in PGRP.workers
+        if (x.id::Int) == id && (isa(x, LocalProcess) || (x::Worker).state == W_CONNECTED)
+            return true
+        end
+    end
+    return false
+end
+
 """
     procs(pid::Integer)
 
@@ -794,17 +803,18 @@ mutable struct ProcessExitedException <: Exception end
 
 worker_from_id(i) = worker_from_id(PGRP, i)
 function worker_from_id(pg::ProcessGroup, i)
-    if in(i, map_del_wrkr)
+    if !isempty(map_del_wrkr) && in(i, map_del_wrkr)
         throw(ProcessExitedException())
     end
-    if !haskey(map_pid_wrkr,i)
+    w = get(map_pid_wrkr, i, nothing)
+    if w === nothing
         if myid() == 1
             error("no process with id $i exists")
         end
         w = Worker(i)
         map_pid_wrkr[i] = w
     else
-        w = map_pid_wrkr[i]
+        w = w::Union{Worker, LocalProcess}
     end
     w
 end
